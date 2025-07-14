@@ -466,8 +466,10 @@ class ModelLoader {
     return new Promise((resolve) => {
       this.loadModelOptimized(
         'portal.glb',
+
         (gltf) => {
           const originalPortal = gltf.scene;
+
           const returnPortal = originalPortal.clone();
           returnPortal.scale.set(0.5, 0.5, 0.5);
           const box = new THREE.Box3().setFromObject(returnPortal);
@@ -484,6 +486,8 @@ class ModelLoader {
             position: new THREE.Vector3(0, 1, 15)
           };
           galleryScene.add(returnPortal);
+
+
           const portalModel = originalPortal.clone();
           portalModel.scale.set(0.5, 0.5, 0.5);
           const portalBox = new THREE.Box3().setFromObject(portalModel);
@@ -500,10 +504,13 @@ class ModelLoader {
             destination: '3d art maybe',
             position: new THREE.Vector3(0, 1, -12),
             teleport: true,
-            sceneTarget: 'gallery3D'
+            sceneTarget: 'gallery3D',
+//////////// FOR ACTUAL PORTAL USE, JUST PUT THIS HERE!!    externalUrl: 'https://www.example.com/'
           };
           scene.add(portalModel);
+
           this.models.portal.push(portalModel);
+
           const canvas = document.createElement('canvas');
           canvas.width = 128;
           canvas.height = 32;
