@@ -499,12 +499,10 @@ class ModelLoader {
           );
           portalModel.rotation.set(0, 0, 0);
           portalModel.userData = { 
-            target: '3d', 
             label: 'gallery1',
             destination: '3d art maybe',
             position: new THREE.Vector3(0, 1, -12),
             teleport: true,
-            sceneTarget: 'gallery3D',
             externalUrl: 'https://nikola14323.github.io/scifi-armory/'
 //////////// FOR ACTUAL PORTAL USE, JUST PUT THIS HERE!!    externalUrl: 'https://www.example.com/'
           };
