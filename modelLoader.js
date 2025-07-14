@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+loadChurchModelimport * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
@@ -91,7 +91,7 @@ class ModelLoader {
         'church.glb',
         (gltf) => {
           this.models.church = gltf.scene;
-          this.models.church.scale.set(0.08, 0.08, 0.08);
+          this.models.church.scale.set(0.07, 0.07, 0.07);
           const box = new THREE.Box3().setFromObject(this.models.church);
           const center = box.getCenter(new THREE.Vector3());
           this.models.church.position.set(
