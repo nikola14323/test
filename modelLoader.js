@@ -505,7 +505,7 @@ class ModelLoader {
             position: new THREE.Vector3(0, 1, -12),
             teleport: true,
             sceneTarget: 'gallery3D',
-            externalURL: 'https://nikola14323.github.io/test/'
+            externalURL: 'https://nikola14323.github.io/scifi-armory/'
 //////////// FOR ACTUAL PORTAL USE, JUST PUT THIS HERE!!    externalUrl: 'https://www.example.com/'
           };
           scene.add(portalModel);
