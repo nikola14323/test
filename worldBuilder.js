@@ -338,16 +338,16 @@ class WorldBuilder {
         <strong style="color: rgb(194, 194, 194);"> Controls:</strong><br>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;"></strong> X top right to exit</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;"></strong> ESC to move mouse free and scroll HERE</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">T & RMB</strong> - Place</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">Z & RMB</strong> - Select</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">V</strong> - Move</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">R</strong> - Rotate</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">S</strong> - Scale</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">Mouse Wheel</strong> - Scale Up/Down</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">Arrow Keys</strong> - Fine Move</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">T</strong> - Toggle Place Mode (surface/10m ahead)</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">Z</strong> - Toggle Select Mode</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">V</strong> - Toggle Move Mode (surface/10m ahead)</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">R</strong> - Cycle Rotation Axis (X→Y→Z), scroll to rotate</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">F</strong> - Toggle Scale Mode (scroll to scale)</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">Click</strong> - Confirm action</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">Delete</strong> - Remove Selected</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">1-9</strong> - Quick Select Model</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">ESC</strong> - Free mouse to use panel</div>
       </div>
+
       
       <!-- Quick Actions -->
       <div style="margin-bottom: 15px;">
@@ -522,7 +522,7 @@ class WorldBuilder {
     this.setMode('select');
   }
   
-  setupEventListeners() {
+setupEventListeners() {
     const dropZone = document.getElementById('wb-drop-zone');
     const fileInput = document.getElementById('wb-file-input');
     
@@ -545,37 +545,39 @@ class WorldBuilder {
       });
     }
     
+    this.rotationAxis = 'x'; // Track current rotation axis
+    
     document.addEventListener('keydown', (e) => {
-      if (!this.isBuilderMode) {
-        if (e.ctrlKey && e.key.toLowerCase() === 'b') {
-          e.preventDefault();
-          this.toggleBuilder();
-        }
+      // Always check for Ctrl+B to toggle builder mode
+      if (e.ctrlKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        this.toggleBuilder();
         return;
       }
+      
+      if (!this.isBuilderMode) return;
       
       switch (e.key.toLowerCase()) {
         case 't':
           e.preventDefault();
-          this.setMode('place');
+          this.toggleMode('place');
           break;
         case 'z':
           e.preventDefault();
-          this.setMode('select');
+          this.toggleMode('select');
           break;
         case 'r':
           e.preventDefault();
           if (this.selectedObject) {
-            this.setMode('rotate');
-            this.openRotationPanel();
+            this.cycleRotationAxis();
           } else {
             this.showStatus('Select an object first to rotate', 2000);
           }
           break;
-        case 's':
+        case 'f': // Changed from 's' to 'f' for scale
           e.preventDefault();
           if (this.selectedObject) {
-            this.setMode('scale');
+            this.toggleMode('scale');
           } else {
             this.showStatus('Select an object first to scale', 2000);
           }
@@ -600,11 +602,6 @@ class WorldBuilder {
         this.deleteSelected();
       }
       
-      const num = parseInt(e.key);
-      if (num >= 1 && num <= 9) {
-        this.selectModelByIndex(num - 1);
-      }
-      
       if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         this.saveWorld();
@@ -615,6 +612,7 @@ class WorldBuilder {
         this.duplicateSelected();
       }
     });
+    
     document.addEventListener('click', (e) => {
       if (!this.isBuilderMode) return;
       if (e.target.closest('#world-builder-panel')) return;
@@ -623,19 +621,78 @@ class WorldBuilder {
       this.handleWorldClick(e);
     });
     
-    document.addEventListener('wheel', (e) => {
-      if (!this.isBuilderMode || this.currentMode !== 'scale' || !this.selectedObject) return;
-      
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      const currentScale = this.selectedObject.scale.x;
-      const newScale = Math.max(0.1, Math.min(5, currentScale + delta));
-      
-      this.selectedObject.scale.setScalar(newScale);
-      this.showStatus(`Scale: ${newScale.toFixed(2)}`, 500);
-    });
-  }
+document.addEventListener('wheel', (e) => {
+  if (!this.isBuilderMode || !this.selectedObject) return;
   
+  e.preventDefault();
+  
+  if (this.currentMode === 'scale') {
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    const currentScale = this.selectedObject.scale.x;
+    const newScale = Math.max(0.01, Math.min(10, currentScale + delta)); // Changed from 0.1 to 0.01 min, 5 to 10 max
+    
+    this.selectedObject.scale.setScalar(newScale);
+    this.showStatus(`Scale: ${newScale.toFixed(3)} (scroll to adjust, click to confirm)`, 500); // Changed to 3 decimal places
+  } else if (this.currentMode === 'rotate') {
+    const delta = e.deltaY > 0 ? -Math.PI/12 : Math.PI/12; // 15 degrees per scroll
+    
+    switch (this.rotationAxis) {
+      case 'x':
+        this.selectedObject.rotation.x += delta;
+        break;
+      case 'y':
+        this.selectedObject.rotation.y += delta;
+        break;
+      case 'z':
+        this.selectedObject.rotation.z += delta;
+        break;
+    }
+    
+    const degrees = Math.round((delta * 180 / Math.PI));
+    const currentDegrees = Math.round((this.selectedObject.rotation[this.rotationAxis] * 180 / Math.PI));
+    this.showStatus(`${this.rotationAxis.toUpperCase()}: ${currentDegrees}° (scroll to adjust, click to confirm)`, 500);
+    this.updateObjectList();
+  }
+});
+}
+
+  toggleMode(mode) {
+  if (this.currentMode === mode) {
+    this.setMode('select');
+    this.showStatus(`${mode.toUpperCase()} mode disabled`, 1000);
+  } else {
+    this.setMode(mode);
+    this.showStatus(`${mode.toUpperCase()} mode enabled`, 1000);
+  }
+}
+cycleRotationAxis() {
+  if (!this.selectedObject) return;
+  
+  const axes = ['x', 'y', 'z'];
+  const currentIndex = axes.indexOf(this.rotationAxis);
+  this.rotationAxis = axes[(currentIndex + 1) % axes.length];
+  
+  this.setMode('rotate');
+  const currentDegrees = Math.round((this.selectedObject.rotation[this.rotationAxis] * 180 / Math.PI));
+  this.showStatus(`Rotating on ${this.rotationAxis.toUpperCase()} axis: ${currentDegrees}° (scroll to adjust)`, 2000);
+}
+
+handleRotateClick() {
+  if (!this.selectedObject) return;
+  
+  // Click confirms the rotation and exits rotate mode
+  this.setMode('select');
+  const currentDegrees = Math.round((this.selectedObject.rotation[this.rotationAxis] * 180 / Math.PI));
+  this.showStatus(`Rotation confirmed: ${this.rotationAxis.toUpperCase()} = ${currentDegrees}°`, 1500);
+  this.updateObjectList();
+}
+
+handleScaleClick() {
+  if (!this.selectedObject) return;
+  
+  this.setMode('select');
+  this.showStatus('Scale confirmed', 1000);
+}
   setMode(mode) {
     this.currentMode = mode;
     
@@ -775,34 +832,61 @@ class WorldBuilder {
     }
   }
 
-  handleMoveClick() {
-    if (!this.selectedObject) {
-      this.showStatus('No object selected to move', 2000);
-      return;
-    }
-    
-    const groundObjects = [];
-    this.scene.children.forEach(child => {
-      if (child.geometry && child.geometry.type === 'PlaneGeometry') {
-        groundObjects.push(child);
-      }
-      if (child.userData && child.userData.type === 'collision') {
-        groundObjects.push(child);
-      }
-    });
-    
-    const groundIntersects = this.raycaster.intersectObjects(groundObjects);
-    if (groundIntersects.length > 0) {
-      const newPosition = groundIntersects[0].point;
-      this.selectedObject.position.copy(newPosition);
-      this.selectedObject.position.y = Math.max(newPosition.y, 0);
-      
-      this.showStatus(`Moved to: ${newPosition.x.toFixed(1)}, ${newPosition.z.toFixed(1)}`, 1500);
-      this.updateObjectList();
-    } else {
-      this.showStatus('Click on the ground to move object', 2000);
-    }
+// In worldBuilder.js - handleMoveClick method
+handleMoveClick() {
+  if (!this.selectedObject) {
+    this.showStatus('No object selected to move', 2000);
+    return;
   }
+  
+  // Get all possible intersectable objects (floor, collision boxes, placed models)
+  const intersectableObjects = [];
+  this.scene.children.forEach(child => {
+    if (child.geometry && child.geometry.type === 'PlaneGeometry') {
+      intersectableObjects.push(child);
+    }
+    if (child.userData && child.userData.type === 'collision') {
+      intersectableObjects.push(child);
+    }
+  });
+  
+  // Add all placed objects and their meshes for intersection (except the selected object)
+  const allPlacedObjects = [...this.placedObjects, ...this.placedCollisionBoxes];
+  allPlacedObjects.forEach(obj => {
+    if (obj !== this.selectedObject) {
+      obj.traverse(child => {
+        if (child.isMesh) {
+          intersectableObjects.push(child);
+        }
+      });
+    }
+  });
+  
+  const intersects = this.raycaster.intersectObjects(intersectableObjects, true);
+  
+  if (intersects.length > 0) {
+    // Move to the intersection point
+    const intersectionPoint = intersects[0].point;
+    this.selectedObject.position.copy(intersectionPoint);
+    
+    this.showStatus(`Moved to intersection (${intersectionPoint.x.toFixed(1)}, ${intersectionPoint.y.toFixed(1)}, ${intersectionPoint.z.toFixed(1)})`, 1500);
+    this.updateObjectList();
+  } else {
+    // No intersection found - move 10m in front of camera
+    const cameraDirection = new THREE.Vector3(0, 0, -1);
+    cameraDirection.applyQuaternion(this.camera.quaternion);
+    cameraDirection.normalize();
+    
+    const newPosition = new THREE.Vector3();
+    newPosition.copy(this.camera.position);
+    newPosition.add(cameraDirection.multiplyScalar(10));
+    
+    this.selectedObject.position.copy(newPosition);
+    
+    this.showStatus(`Moved 10m ahead (${newPosition.x.toFixed(1)}, ${newPosition.y.toFixed(1)}, ${newPosition.z.toFixed(1)})`, 1500);
+    this.updateObjectList();
+  }
+}
 
   fineMoveObject(direction) {
     if (!this.selectedObject) return;
@@ -842,19 +926,24 @@ class WorldBuilder {
     this.showStatus(`Removed: ${modelName}`, 1500);
   }
   
-  handleWorldClick(e) {
-    this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    
-    if (this.currentMode === 'select') {
-      this.handleSelectClick();
-    } else if (this.currentMode === 'place') {
-      this.handlePlaceClick();
-    } else if (this.currentMode === 'move') {
-      this.handleMoveClick();
-    }
+// In worldBuilder.js - handleWorldClick method
+handleWorldClick(e) {
+  this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  this.raycaster.setFromCamera(this.mouse, this.camera);
+  
+  if (this.currentMode === 'select') {
+    this.handleSelectClick();
+  } else if (this.currentMode === 'place') {
+    this.handlePlaceClick();
+  } else if (this.currentMode === 'move') {
+    this.handleMoveClick();
+  } else if (this.currentMode === 'scale') {
+    this.handleScaleClick();
+  } else if (this.currentMode === 'rotate') {
+    this.handleRotateClick();
   }
+}
   
   handleSelectClick() {
     const allPlacedObjects = [...this.placedObjects, ...this.placedCollisionBoxes];
@@ -884,62 +973,90 @@ class WorldBuilder {
     this.clearSelection();
   }
   
-  handlePlaceClick() {
-    if (!this.selectedModel) {
-      this.showStatus('Select a model first (press 1-9 or click in library)', 2000);
-      return;
+// In worldBuilder.js - handlePlaceClick method
+handlePlaceClick() {
+  if (!this.selectedModel) {
+    this.showStatus('Select a model first (click in library)', 2000);
+    return;
+  }
+  
+  // Get all possible intersectable objects (floor, collision boxes, placed models)
+  const intersectableObjects = [];
+  this.scene.children.forEach(child => {
+    if (child.geometry && child.geometry.type === 'PlaneGeometry') {
+      intersectableObjects.push(child);
     }
-    
-    const groundObjects = [];
-    this.scene.children.forEach(child => {
-      if (child.geometry && child.geometry.type === 'PlaneGeometry') {
-        groundObjects.push(child);
-      }
-      if (child.userData && child.userData.type === 'collision') {
-        groundObjects.push(child);
+    if (child.userData && child.userData.type === 'collision') {
+      intersectableObjects.push(child);
+    }
+  });
+  
+  // Add all placed objects and their meshes for intersection
+  const allPlacedObjects = [...this.placedObjects, ...this.placedCollisionBoxes];
+  allPlacedObjects.forEach(obj => {
+    obj.traverse(child => {
+      if (child.isMesh) {
+        intersectableObjects.push(child);
       }
     });
+  });
+  
+  const intersects = this.raycaster.intersectObjects(intersectableObjects, true);
+  
+  if (intersects.length > 0) {
+    // Place at the intersection point
+    const intersectionPoint = intersects[0].point;
+    this.placeModel(intersectionPoint);
+    this.showStatus(`Placed at intersection (${intersectionPoint.x.toFixed(1)}, ${intersectionPoint.y.toFixed(1)}, ${intersectionPoint.z.toFixed(1)})`, 2000);
+  } else {
+    // No intersection found - place 10m in front of camera
+    const cameraDirection = new THREE.Vector3(0, 0, -1);
+    cameraDirection.applyQuaternion(this.camera.quaternion);
+    cameraDirection.normalize();
     
-    const groundIntersects = this.raycaster.intersectObjects(groundObjects);
-    if (groundIntersects.length > 0) {
-      this.placeModel(groundIntersects[0].point);
-    } else {
-      this.showStatus('Click on the ground to place object', 2000);
-    }
+    const placementPosition = new THREE.Vector3();
+    placementPosition.copy(this.camera.position);
+    placementPosition.add(cameraDirection.multiplyScalar(10));
+    
+    this.placeModel(placementPosition);
+    this.showStatus(`Placed 10m ahead (${placementPosition.x.toFixed(1)}, ${placementPosition.y.toFixed(1)}, ${placementPosition.z.toFixed(1)})`, 2000);
   }
-    placeModel(position) {
-    if (!this.selectedModel || !this.availableModels.has(this.selectedModel)) return;
-    
-    const modelData = this.availableModels.get(this.selectedModel);
-    const modelClone = modelData.scene.clone();
-    modelClone.position.copy(position);
-    modelClone.position.y = Math.max(position.y, 0);
-    const uniqueId = Date.now() + Math.random();
-    const instanceName = `${this.selectedModel}_${uniqueId}`;
-    
-    modelClone.userData = {
-      type: 'world-builder-object',
-      modelName: this.selectedModel,
-      instanceId: uniqueId,
-      instanceName: instanceName,
-      id: uniqueId,
-      created: new Date().toISOString(),
-      isCollisionShape: modelData.isCollisionShape || false,
-      shapeType: modelData.shapeType || null
-    };
-    
-    this.scene.add(modelClone);
-    
-    if (modelData.isCollisionShape) {
-      this.placedCollisionBoxes.push(modelClone);
-      this.showStatus(`Placed collision: ${this.selectedModel}`, 1500);
-    } else {
-      this.placedObjects.push(modelClone);
-      this.showStatus(`Placed: ${this.selectedModel}`, 1500);
-    }
-    this.selectObject(modelClone);
-    this.updateObjectList();
+}
+// In worldBuilder.js - placeModel method
+placeModel(position) {
+  if (!this.selectedModel || !this.availableModels.has(this.selectedModel)) return;
+  
+  const modelData = this.availableModels.get(this.selectedModel);
+  const modelClone = modelData.scene.clone();
+  modelClone.position.copy(position);
+  // Remove the Math.max constraint - allow placement anywhere in 3D space
+  
+  const uniqueId = Date.now() + Math.random();
+  const instanceName = `${this.selectedModel}_${uniqueId}`;
+  
+  modelClone.userData = {
+    type: 'world-builder-object',
+    modelName: this.selectedModel,
+    instanceId: uniqueId,
+    instanceName: instanceName,
+    id: uniqueId,
+    created: new Date().toISOString(),
+    isCollisionShape: modelData.isCollisionShape || false,
+    shapeType: modelData.shapeType || null
+  };
+  
+  this.scene.add(modelClone);
+  
+  if (modelData.isCollisionShape) {
+    this.placedCollisionBoxes.push(modelClone);
+    this.showStatus(`Placed collision: ${this.selectedModel}`, 1500);
+  } else {
+    this.placedObjects.push(modelClone);
+    this.showStatus(`Placed: ${this.selectedModel}`, 1500);
   }
+  this.selectObject(modelClone);
+  this.updateObjectList();
+}
   
   selectObject(object) {
     if (this.selectedObject) {
