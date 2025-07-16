@@ -91,15 +91,12 @@ class ModelLoader {
         'church.glb',
         (gltf) => {
           this.models.church = gltf.scene;
-          this.models.church.scale.set(0.07, 0.07, 0.07);
+          this.models.church.scale.set(0.1, 0.1, 0.1);
           const box = new THREE.Box3().setFromObject(this.models.church);
           const center = box.getCenter(new THREE.Vector3());
-          this.models.church.position.set(
-            25 - center.x * 0.1,
-            0,
-            -4 - center.z * 0.1
+          this.models.church.position.set(0,0,-5
           );
-          this.models.church.rotation.set(0, 30, 0);
+          this.models.church.rotation.set(0, -2*Math.PI/4, 0);
           this.scene.add(this.models.church);
           this.registerModelWithWorldBuilder('church', gltf);
           this.updateLoadingProgress(resolve);
@@ -499,11 +496,12 @@ class ModelLoader {
           );
           portalModel.rotation.set(0, 0, 0);
           portalModel.userData = { 
+            target: '3d', 
             label: 'gallery1',
             destination: '3d art maybe',
             position: new THREE.Vector3(0, 1, -12),
             teleport: true,
-            externalUrl: 'https://nikola14323.github.io/scifi-armory/'
+            externalUrl: 'https://finnb24.github.io/space-hub/'
 //////////// FOR ACTUAL PORTAL USE, JUST PUT THIS HERE!!    externalUrl: 'https://www.example.com/'
           };
           scene.add(portalModel);
