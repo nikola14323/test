@@ -967,12 +967,12 @@ function enableFullQuality() {
   }
 
   //grid for ground
-  const grid = new THREE.GridHelper(44, 22, 0x9be7ff, 0x3d4262);
+  const grid = new THREE.GridHelper(100, 100, 0x9be7ff, 0x3d4262);
   grid.position.y = 0.01;
   scene.add(grid);
   //Floor
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(50,50),
+    new THREE.PlaneGeometry(100,100),
     new THREE.MeshPhongMaterial({ color:0x3d4262, shininess: 10 })
   );
   floor.rotation.x = -Math.PI/2; 
@@ -1060,7 +1060,7 @@ try {
   galleryScene.add(gallerySpotLight.target);
   //floor
   const galleryFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(50,50),
+    new THREE.PlaneGeometry(100,100),
     new THREE.MeshPhongMaterial({ color:0x1a1a1a, shininess: 30 })
   );
   galleryFloor.rotation.x = -Math.PI/2; 
@@ -1387,6 +1387,26 @@ document.addEventListener('minimap-navigate', (e) => {
 document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   keys[key] = true;
+  
+  // World Builder mode takes priority and blocks other controls
+  if (worldBuilder && worldBuilder.isBuilderMode) {
+    // Only allow basic movement keys and world builder controls
+    if (['w', 'a', 's', 'd', 'shift', ' ', 'b'].includes(key)) {
+      // Allow basic movement
+      return;
+    }
+    
+    // Block all other game controls when in builder mode
+    if (['i', 'm', 'j', 'v', 'q', 'e'].includes(key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    
+    // World builder controls are handled in worldBuilder.js
+    return;
+  }
+  // Normal game controls (only when NOT in builder mode)
   if (key === 'i') {
     e.preventDefault();
     e.stopPropagation();
@@ -1404,74 +1424,74 @@ document.addEventListener('keydown', (e) => {
       minimap.toggleFullscreen();
     }
   }
-if (key === 'j' && gameStarted && !overlays.isPaperReadingMode() && !(inventorySystem && inventorySystem.isOpen) && !modelInfoViewer.isViewerActive()) {
-  const cameraDirection = new THREE.Vector3(0, 0, -1);
-  cameraDirection.applyQuaternion(camera.quaternion);
-  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-  const allSceneObjects = [];
-  activeScene.traverse((object) => {
-    if (object.isMesh) {
-      allSceneObjects.push(object);
-    }
-  });
-  
-  const intersects = raycaster.intersectObjects(allSceneObjects, true);
-  if (intersects.length > 0) {
-    let validTarget = null;
-    let distance = Infinity;
-    
-    for (const intersect of intersects) {
-      const obj = intersect.object;
-      distance = intersect.distance;
-      
-      if (distance > modelViewerDetectionDistance) {
-        console.log(`Object too far: ${distance.toFixed(2)} units (max: ${modelViewerDetectionDistance})`);
-        continue;
+  if (key === 'j' && gameStarted && !overlays.isPaperReadingMode() && !(inventorySystem && inventorySystem.isOpen) && !modelInfoViewer.isViewerActive()) {
+    const cameraDirection = new THREE.Vector3(0, 0, -1);
+    cameraDirection.applyQuaternion(camera.quaternion);
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const allSceneObjects = [];
+    activeScene.traverse((object) => {
+      if (object.isMesh) {
+        allSceneObjects.push(object);
       }
+    });
     
-      if (modelInfoViewer.shouldIgnoreObject(obj)) {
-        console.log('Skipping ignored object:', obj.name || 'unnamed');
-        continue;
-      }
+    const intersects = raycaster.intersectObjects(allSceneObjects, true);
+    if (intersects.length > 0) {
+      let validTarget = null;
+      let distance = Infinity;
       
-      let parentObj = obj;
-      while (parentObj.parent && parentObj.parent !== activeScene) {
-        parentObj = parentObj.parent;
+      for (const intersect of intersects) {
+        const obj = intersect.object;
+        distance = intersect.distance;
         
-        if (parentObj.userData && 
-            (parentObj.userData.modelName || 
-             parentObj.userData.type && !parentObj.userData.type.includes('collision'))) {
-          validTarget = parentObj;
+        if (distance > modelViewerDetectionDistance) {
+          console.log(`Object too far: ${distance.toFixed(2)} units (max: ${modelViewerDetectionDistance})`);
+          continue;
+        }
+      
+        if (modelInfoViewer.shouldIgnoreObject(obj)) {
+          console.log('Skipping ignored object:', obj.name || 'unnamed');
+          continue;
+        }
+        
+        let parentObj = obj;
+        while (parentObj.parent && parentObj.parent !== activeScene) {
+          parentObj = parentObj.parent;
+          
+          if (parentObj.userData && 
+              (parentObj.userData.modelName || 
+               parentObj.userData.type && !parentObj.userData.type.includes('collision'))) {
+            validTarget = parentObj;
+            break;
+          }
+        }
+        
+        if (!validTarget) {
+          validTarget = obj;
+        }
+        
+        if (validTarget && !modelInfoViewer.shouldIgnoreObject(validTarget)) {
+          console.log(`Opening model viewer for: ${validTarget.userData?.name || validTarget.name || 'unnamed object'} (distance: ${distance.toFixed(2)})`);
+          modelInfoViewer.openViewer(validTarget);
+          
+          if (portfolioAnalytics) {
+            portfolioAnalytics.trackInteraction('model_viewer', 'trigger', {
+              modelName: validTarget.userData?.name || validTarget.name || 'unknown',
+              distance: distance.toFixed(2)
+            });
+          }
+          
           break;
         }
       }
       
       if (!validTarget) {
-        validTarget = obj;
+        if (distance <= modelViewerDetectionDistance) {
+          console.log('No valid model found among intersected objects');
+        } 
       }
-      
-      if (validTarget && !modelInfoViewer.shouldIgnoreObject(validTarget)) {
-        console.log(`Opening model viewer for: ${validTarget.userData?.name || validTarget.name || 'unnamed object'} (distance: ${distance.toFixed(2)})`);
-        modelInfoViewer.openViewer(validTarget);
-        
-        if (portfolioAnalytics) {
-          portfolioAnalytics.trackInteraction('model_viewer', 'trigger', {
-            modelName: validTarget.userData?.name || validTarget.name || 'unknown',
-            distance: distance.toFixed(2)
-          });
-        }
-        
-        break;
-      }
-    }
-    
-    if (!validTarget) {
-      if (distance <= modelViewerDetectionDistance) {
-        console.log('No valid model found among intersected objects');
-      } 
     }
   }
-}
   if (key === 'v' && !eagleVision?.isActive && gameStarted && !overlays.isPaperReadingMode() && !(inventorySystem && inventorySystem.isOpen) && !spectatorMode) {
     eagleVision?.activate(currentScene);
   }
@@ -1927,21 +1947,77 @@ for (const intersect of paperIntersects) {
     window.currentDoorInView = null;
   }
 }
-  // collision detection main scene
-  function checkCollision(currentPosition, newPosition) {
-    if (currentScene !== 'main') return false; 
+// In main.js - Update checkCollision function to include world builder collision objects
+function checkCollision(currentPosition, newPosition) {
+  if (currentScene !== 'main') return false; 
 
-    const characterRadius = 0.4;
+  const characterRadius = 0.4;
 
-    for (const collisionBox of collisionBoxes) {
-      const boxGeometry = collisionBox.geometry;
+  // Check original collision boxes
+  for (const collisionBox of collisionBoxes) {
+    const boxGeometry = collisionBox.geometry;
+    const boxPosition = collisionBox.position;
+    if (boxGeometry.type === 'CylinderGeometry') {
+      const cylinderRadius = boxGeometry.parameters.radiusTop;
+      const cylinderHeight = boxGeometry.parameters.height;
+      const cylinderTop = boxPosition.y + cylinderHeight/2;
+      const cylinderBottom = boxPosition.y - cylinderHeight/2;
+      const currentDx = currentPosition.x - boxPosition.x;
+      const currentDz = currentPosition.z - boxPosition.z;
+      const currentDistance = Math.sqrt(currentDx * currentDx + currentDz * currentDz);
+      const newDx = newPosition.x - boxPosition.x;
+      const newDz = newPosition.z - boxPosition.z;
+      const newDistance = Math.sqrt(newDx * newDx + newDz * newDz);
+
+      if (newDistance < (cylinderRadius + characterRadius) &&
+          newDistance <= currentDistance &&
+          newPosition.y < cylinderTop && 
+          newPosition.y + 2 > cylinderBottom) {
+        return true;
+      }
+    } else {
+      const boxWidth = boxGeometry.parameters.width;
+      const boxHeight = boxGeometry.parameters.height;
+      const boxDepth = boxGeometry.parameters.depth;
+      const boxMinX = boxPosition.x - boxWidth / 2;
+      const boxMaxX = boxPosition.x + boxWidth / 2;
+      const boxMinZ = boxPosition.z - boxDepth / 2;
+      const boxMaxZ = boxPosition.z + boxDepth / 2;
+      const boxMinY = boxPosition.y - boxHeight / 2;
+      const boxMaxY = boxPosition.y + boxHeight / 2;
+      const wouldCollideX = newPosition.x + characterRadius > boxMinX && newPosition.x - characterRadius < boxMaxX;
+      const wouldCollideZ = newPosition.z + characterRadius > boxMinZ && newPosition.z - characterRadius < boxMaxZ;
+      const wouldCollideY = newPosition.y < boxMaxY && newPosition.y + 2 > boxMinY;
+      const currentDistanceToCenter = Math.sqrt(
+        Math.pow(currentPosition.x - boxPosition.x, 2) + 
+        Math.pow(currentPosition.z - boxPosition.z, 2)
+      );
+      const newDistanceToCenter = Math.sqrt(
+        Math.pow(newPosition.x - boxPosition.x, 2) + 
+        Math.pow(newPosition.z - boxPosition.z, 2)
+      );
+
+      if (wouldCollideX && wouldCollideZ && wouldCollideY &&
+          newDistanceToCenter <= currentDistanceToCenter) {
+        return true;
+      }
+    }
+  }
+
+  // Check world builder placed collision objects
+  if (worldBuilder && worldBuilder.placedCollisionBoxes) {
+    for (const collisionBox of worldBuilder.placedCollisionBoxes) {
+      if (!collisionBox.userData.isCollisionShape) continue;
+      
       const boxPosition = collisionBox.position;
-      if (boxGeometry.type === 'CylinderGeometry') {
-        // Cylinder 
-        const cylinderRadius = boxGeometry.parameters.radiusTop;
-        const cylinderHeight = boxGeometry.parameters.height;
+      const boxScale = collisionBox.scale;
+      
+      if (collisionBox.userData.shapeType === 'cylinder') {
+        const cylinderRadius = 1 * boxScale.x;
+        const cylinderHeight = 2 * boxScale.y;
         const cylinderTop = boxPosition.y + cylinderHeight/2;
         const cylinderBottom = boxPosition.y - cylinderHeight/2;
+        
         const currentDx = currentPosition.x - boxPosition.x;
         const currentDz = currentPosition.z - boxPosition.z;
         const currentDistance = Math.sqrt(currentDx * currentDx + currentDz * currentDz);
@@ -1956,19 +2032,21 @@ for (const intersect of paperIntersects) {
           return true;
         }
       } else {
-        // Box collision
-        const boxWidth = boxGeometry.parameters.width;
-        const boxHeight = boxGeometry.parameters.height;
-        const boxDepth = boxGeometry.parameters.depth;
+        const boxWidth = 2 * boxScale.x;
+        const boxHeight = 2 * boxScale.y;
+        const boxDepth = 2 * boxScale.z;
+        
         const boxMinX = boxPosition.x - boxWidth / 2;
         const boxMaxX = boxPosition.x + boxWidth / 2;
         const boxMinZ = boxPosition.z - boxDepth / 2;
         const boxMaxZ = boxPosition.z + boxDepth / 2;
         const boxMinY = boxPosition.y - boxHeight / 2;
         const boxMaxY = boxPosition.y + boxHeight / 2;
+        
         const wouldCollideX = newPosition.x + characterRadius > boxMinX && newPosition.x - characterRadius < boxMaxX;
         const wouldCollideZ = newPosition.z + characterRadius > boxMinZ && newPosition.z - characterRadius < boxMaxZ;
         const wouldCollideY = newPosition.y < boxMaxY && newPosition.y + 2 > boxMinY;
+        
         const currentDistanceToCenter = Math.sqrt(
           Math.pow(currentPosition.x - boxPosition.x, 2) + 
           Math.pow(currentPosition.z - boxPosition.z, 2)
@@ -1984,43 +2062,121 @@ for (const intersect of paperIntersects) {
         }
       }
     }
-    return false;
+  }
+  
+  return false;
+}
+
+function getGroundLevel(position) {
+  if (currentScene !== 'main') return 0; 
+  let groundLevel = 0;
+  
+  // Check original collision boxes
+  for (const collisionBox of collisionBoxes) {
+    const boxGeometry = collisionBox.geometry;
+    const boxPosition = collisionBox.position;
+    if (boxGeometry.type === 'CylinderGeometry') {
+      const cylinderRadius = boxGeometry.parameters.radiusTop;
+      const cylinderHeight = boxGeometry.parameters.height;
+      const cylinderTop = boxPosition.y + cylinderHeight/2;
+      const cylinderBottom = boxPosition.y - cylinderHeight/2;
+      const dx = position.x - boxPosition.x;
+      const dz = position.z - boxPosition.z;
+      const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+      
+      // Only consider this a valid ground level if:
+      // 1. We're within the cylinder horizontally
+      // 2. We're above the cylinder (not underneath it)
+      // 3. We're close to the top surface (within 1 unit)
+      if (horizontalDistance <= cylinderRadius && 
+          position.y >= cylinderBottom && 
+          position.y <= cylinderTop + 1 && 
+          cylinderTop > groundLevel) {
+        groundLevel = cylinderTop;
+      }
+    } else {
+      const boxWidth = boxGeometry.parameters.width;
+      const boxDepth = boxGeometry.parameters.depth;
+      const boxHeight = boxGeometry.parameters.height;
+      const boxTop = boxPosition.y + boxHeight/2;
+      const boxBottom = boxPosition.y - boxHeight/2;
+      const boxMinX = boxPosition.x - boxWidth / 2;
+      const boxMaxX = boxPosition.x + boxWidth / 2;
+      const boxMinZ = boxPosition.z - boxDepth / 2;
+      const boxMaxZ = boxPosition.z + boxDepth / 2;
+      
+      // Only consider this a valid ground level if:
+      // 1. We're within the box horizontally
+      // 2. We're above the box (not underneath it)
+      // 3. We're close to the top surface (within 1 unit)
+      if (position.x >= boxMinX && position.x <= boxMaxX &&
+          position.z >= boxMinZ && position.z <= boxMaxZ &&
+          position.y >= boxBottom && 
+          position.y <= boxTop + 1 && 
+          boxTop > groundLevel) {
+        groundLevel = boxTop;
+      }
+    }
   }
 
-  function getGroundLevel(position) {
-    if (currentScene !== 'main') return 0; 
-    let groundLevel = 0;
-    for (const collisionBox of collisionBoxes) {
-      const boxGeometry = collisionBox.geometry;
+  // Check world builder placed collision objects
+  if (worldBuilder && worldBuilder.placedCollisionBoxes) {
+    for (const collisionBox of worldBuilder.placedCollisionBoxes) {
+      if (!collisionBox.userData.isCollisionShape) continue;
+      
       const boxPosition = collisionBox.position;
-      if (boxGeometry.type === 'CylinderGeometry') {
-        const cylinderRadius = boxGeometry.parameters.radiusTop;
-        const cylinderHeight = boxGeometry.parameters.height;
+      const boxScale = collisionBox.scale;
+      
+      if (collisionBox.userData.shapeType === 'cylinder') {
+        const cylinderRadius = 1 * boxScale.x;
+        const cylinderHeight = 2 * boxScale.y;
         const cylinderTop = boxPosition.y + cylinderHeight/2;
+        const cylinderBottom = boxPosition.y - cylinderHeight/2;
+        
         const dx = position.x - boxPosition.x;
         const dz = position.z - boxPosition.z;
         const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
-        if (horizontalDistance <= cylinderRadius && cylinderTop > groundLevel) {
+        
+        // Only consider this a valid ground level if:
+        // 1. We're within the cylinder horizontally
+        // 2. We're above the cylinder (not underneath it)
+        // 3. We're close to the top surface (within 1 unit)
+        if (horizontalDistance <= cylinderRadius && 
+            position.y >= cylinderBottom && 
+            position.y <= cylinderTop + 1 && 
+            cylinderTop > groundLevel) {
           groundLevel = cylinderTop;
         }
       } else {
-        const boxWidth = boxGeometry.parameters.width;
-        const boxDepth = boxGeometry.parameters.depth;
-        const boxHeight = boxGeometry.parameters.height;
+        const boxWidth = 2 * boxScale.x;
+        const boxDepth = 2 * boxScale.z;
+        const boxHeight = 2 * boxScale.y;
         const boxTop = boxPosition.y + boxHeight/2;
+        const boxBottom = boxPosition.y - boxHeight/2;
+        
         const boxMinX = boxPosition.x - boxWidth / 2;
         const boxMaxX = boxPosition.x + boxWidth / 2;
         const boxMinZ = boxPosition.z - boxDepth / 2;
         const boxMaxZ = boxPosition.z + boxDepth / 2;
+        
+        // Only consider this a valid ground level if:
+        // 1. We're within the box horizontally
+        // 2. We're above the box (not underneath it)
+        // 3. We're close to the top surface (within 1 unit)
         if (position.x >= boxMinX && position.x <= boxMaxX &&
             position.z >= boxMinZ && position.z <= boxMaxZ &&
+            position.y >= boxBottom && 
+            position.y <= boxTop + 1 && 
             boxTop > groundLevel) {
           groundLevel = boxTop;
         }
       }
     }
-    return groundLevel;
   }
+  
+  return groundLevel;
+}
+
 function handleModelInspect() {
   if (!gameStarted || overlays.isPaperReadingMode() || (inventorySystem && inventorySystem.isOpen) || modelInfoViewer.isViewerActive()) {
     return;
@@ -2093,7 +2249,13 @@ function handleModelInspect() {
     }
   }
 }
+// In main.js - Make sure worldBuilder is properly exposed
+window.worldBuilder = worldBuilder;
 
+// Ensure worldBuilder is accessible in collision functions
+if (typeof worldBuilder !== 'undefined') {
+  window.worldBuilder = worldBuilder;
+}
 window.handleModelInspect = handleModelInspect;
 
 function moveCharacter(dt) {
