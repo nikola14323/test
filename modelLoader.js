@@ -77,19 +77,22 @@ class ModelLoader {
       (gltf) => {
         this.modelCache.set(url, gltf);
         gltf.scene.traverse((node) => {
-          if (node.isMesh) {
-            node.castShadow = true;
-            node.receiveShadow = true;
-            
-            if (node.material) {
-              node.material.needsUpdate = false;
-              if (node.material.map) {
-                node.material.map.generateMipmaps = false;
-                node.material.map.minFilter = THREE.LinearFilter;
-              }
-            }
-          }
-        });
+  if (node.isMesh) {
+    node.castShadow = true;
+    node.receiveShadow = true;
+    
+    // Mark as collidable (default for all loaded models)
+    node.userData.hasCollision = true;
+    
+    if (node.material) {
+      node.material.needsUpdate = false;
+      if (node.material.map) {
+        node.material.map.generateMipmaps = false;
+        node.material.map.minFilter = THREE.LinearFilter;
+      }
+    }
+  }
+});
         
         callback(gltf);
       },
