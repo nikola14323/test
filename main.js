@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import './autoMeshCollision.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { WorldBuilder } from './worldBuilder.js';
