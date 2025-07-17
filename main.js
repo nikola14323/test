@@ -967,9 +967,193 @@ function enableFullQuality() {
   }
 
   //grid for ground
-  const grid = new THREE.GridHelper(100, 100, 0x9be7ff, 0x3d4262);
-  grid.position.y = 0.01;
-  scene.add(grid);
+// Replace this existing code in main.js (around line 180-183):
+// const grid = new THREE.GridHelper(100, 100, 0x9be7ff, 0x3d4262);
+// grid.position.y = 0.01;
+// scene.add(grid);
+
+// NEW COORDINATE GRID CODE:
+function createCoordinateGrid(scene, size = 50, gridStep = 1, majorStep = 10) {
+  // Remove existing grid if it exists
+  const existingGrid = scene.getObjectByName('coordinate-grid');
+  if (existingGrid) {
+    scene.remove(existingGrid);
+  }
+
+  const coordinateGrid = new THREE.Group();
+  coordinateGrid.name = 'coordinate-grid';
+  
+  // Colors
+  const minorGridColor = 0x3d4262;
+  const majorGridColor = 0x9be7ff;
+  const xAxisColor = 0xff4444;
+  const zAxisColor = 0x4444ff;
+  const originColor = 0x44ff44;
+  
+  // Create grid lines
+  const minorLines = [];
+  const majorLines = [];
+  const axisLines = [];
+  
+  // Generate grid lines
+  for (let i = -size; i <= size; i += gridStep) {
+    const isMajor = i % majorStep === 0;
+    const isAxis = i === 0;
+    
+    if (isAxis) {
+      // X-axis line (red)
+      axisLines.push(-size, 0, i, size, 0, i);
+      // Z-axis line (blue) 
+      axisLines.push(i, 0, -size, i, 0, size);
+    } else if (isMajor) {
+      // Major grid lines
+      majorLines.push(-size, 0, i, size, 0, i); // Horizontal lines
+      majorLines.push(i, 0, -size, i, 0, size); // Vertical lines
+    } else {
+      // Minor grid lines
+      minorLines.push(-size, 0, i, size, 0, i); // Horizontal lines
+      minorLines.push(i, 0, -size, i, 0, size); // Vertical lines
+    }
+  }
+  
+  // Create line geometries
+  if (minorLines.length > 0) {
+    const minorGeometry = new THREE.BufferGeometry();
+    minorGeometry.setAttribute('position', new THREE.Float32BufferAttribute(minorLines, 3));
+    const minorMaterial = new THREE.LineBasicMaterial({ 
+      color: minorGridColor, 
+      transparent: true, 
+      opacity: 0.3 
+    });
+    const minorGrid = new THREE.LineSegments(minorGeometry, minorMaterial);
+    coordinateGrid.add(minorGrid);
+  }
+  
+  if (majorLines.length > 0) {
+    const majorGeometry = new THREE.BufferGeometry();
+    majorGeometry.setAttribute('position', new THREE.Float32BufferAttribute(majorLines, 3));
+    const majorMaterial = new THREE.LineBasicMaterial({ 
+      color: majorGridColor, 
+      transparent: true, 
+      opacity: 0.6 
+    });
+    const majorGrid = new THREE.LineSegments(majorGeometry, majorMaterial);
+    coordinateGrid.add(majorGrid);
+  }
+  
+  if (axisLines.length > 0) {
+    // Split axis lines into X and Z
+    const xAxisGeometry = new THREE.BufferGeometry();
+    const zAxisGeometry = new THREE.BufferGeometry();
+    
+    // X-axis (horizontal lines)
+    const xAxisPoints = [];
+    const zAxisPoints = [];
+    
+    for (let i = 0; i < axisLines.length; i += 6) {
+      const x1 = axisLines[i];
+      const y1 = axisLines[i + 1];
+      const z1 = axisLines[i + 2];
+      const x2 = axisLines[i + 3];
+      const y2 = axisLines[i + 4];
+      const z2 = axisLines[i + 5];
+      
+      if (z1 === z2) {
+        // This is an X-axis line (constant Z)
+        xAxisPoints.push(x1, y1, z1, x2, y2, z2);
+      } else {
+        // This is a Z-axis line (constant X)
+        zAxisPoints.push(x1, y1, z1, x2, y2, z2);
+      }
+    }
+    
+    if (xAxisPoints.length > 0) {
+      xAxisGeometry.setAttribute('position', new THREE.Float32BufferAttribute(xAxisPoints, 3));
+      const xAxisMaterial = new THREE.LineBasicMaterial({ color: xAxisColor, linewidth: 2 });
+      const xAxisGrid = new THREE.LineSegments(xAxisGeometry, xAxisMaterial);
+      coordinateGrid.add(xAxisGrid);
+    }
+    
+    if (zAxisPoints.length > 0) {
+      zAxisGeometry.setAttribute('position', new THREE.Float32BufferAttribute(zAxisPoints, 3));
+      const zAxisMaterial = new THREE.LineBasicMaterial({ color: zAxisColor, linewidth: 2 });
+      const zAxisGrid = new THREE.LineSegments(zAxisGeometry, zAxisMaterial);
+      coordinateGrid.add(zAxisGrid);
+    }
+  }
+  
+  // Create coordinate labels
+  const labelGroup = new THREE.Group();
+  labelGroup.name = 'coordinate-labels';
+  
+  // Create text labels for major grid points
+  for (let i = -size; i <= size; i += majorStep) {
+    if (i === 0) continue; // Skip origin
+    
+    // X-axis labels
+    const xLabel = createTextLabel(i.toString(), 0xff4444);
+    xLabel.position.set(i, 0.1, -2);
+    labelGroup.add(xLabel);
+    
+    // Z-axis labels  
+    const zLabel = createTextLabel(i.toString(), 0x4444ff);
+    zLabel.position.set(-2, 0.1, i);
+    labelGroup.add(zLabel);
+  }
+  
+  // Origin label
+  const originLabel = createTextLabel('0', originColor);
+  originLabel.position.set(-1, 0.1, -1);
+  labelGroup.add(originLabel);
+  
+  // Axis labels
+  const xAxisLabel = createTextLabel('X', xAxisColor);
+  xAxisLabel.position.set(size - 5, 0.1, -2);
+  labelGroup.add(xAxisLabel);
+  
+  const zAxisLabel = createTextLabel('Z', zAxisColor);
+  zAxisLabel.position.set(-2, 0.1, size - 5);
+  labelGroup.add(zAxisLabel);
+  
+  coordinateGrid.add(labelGroup);
+  coordinateGrid.position.y = 0.01;
+  
+  return coordinateGrid;
+}
+
+function createTextLabel(text, color) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  const fontSize = 32;
+  
+  canvas.width = 128;
+  canvas.height = 64;
+  
+  context.font = `${fontSize}px Arial`;
+  context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
+  
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.1
+  });
+  
+  const geometry = new THREE.PlaneGeometry(2, 1);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2;
+  
+  return mesh;
+}
+
+// Create and add the coordinate grid with 2-step intervals
+const coordinateGrid = createCoordinateGrid(scene, 50, 1, 2);
+scene.add(coordinateGrid);
   //Floor
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(100,100),
