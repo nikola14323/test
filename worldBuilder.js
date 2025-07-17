@@ -99,61 +99,80 @@ class WorldBuilder {
     return [];
   }
 
-  async loadWorldWhenReady(retryCount = 0) {
-    if (!this.queuedWorldData) return 0;
-    
-    const worldData = this.queuedWorldData;
-    const requiredModels = [...new Set(worldData.objects
-      .map(obj => obj.modelName)
-      .filter(name => !name.startsWith('collision_'))
-    )];
-    
-    const availableModels = Array.from(this.availableModels.keys());
-    const missingModels = requiredModels.filter(model => !this.availableModels.has(model));
-    
-    if (missingModels.length > 0) {
-      if (retryCount < 10) {
-        setTimeout(() => {
-          this.loadWorldWhenReady(retryCount + 1);
-        }, 1000 + (retryCount * 500));
-        return 0;
-      } else {
-        return 0;
-      }
+async loadWorldWhenReady(retryCount = 0) {
+  if (!this.queuedWorldData) return 0;
+  
+  const worldData = this.queuedWorldData;
+  const requiredModels = [...new Set(worldData.objects
+    .map(obj => obj.modelName)
+    .filter(name => !name.startsWith('collision_'))
+  )];
+  
+  const availableModels = Array.from(this.availableModels.keys());
+  const missingModels = requiredModels.filter(model => !this.availableModels.has(model));
+  
+  if (missingModels.length > 0) {
+    if (retryCount < 10) {
+      setTimeout(() => {
+        this.loadWorldWhenReady(retryCount + 1);
+      }, 1000 + (retryCount * 500));
+      return 0;
+    } else {
+      console.warn('Some models are missing:', missingModels);
+      return 0;
     }
-    
-    this.placedObjects.forEach(obj => this.scene.remove(obj));
-    this.placedObjects = [];
-    this.placedCollisionBoxes.forEach(box => this.scene.remove(box));
-    this.placedCollisionBoxes = [];
-    
-    let loadedCount = 0;
-    for (const objData of worldData.objects) {
-      if (this.availableModels.has(objData.modelName)) {
-        const modelData = this.availableModels.get(objData.modelName);
-        const obj = modelData.scene.clone();
-        
-        obj.position.set(objData.position.x, objData.position.y, objData.position.z);
-        obj.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
-        obj.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-        obj.userData = objData.userData;
-        
-        this.scene.add(obj);
-        
-        if (modelData.isCollisionShape) {
-          this.placedCollisionBoxes.push(obj);
-        } else {
-          this.placedObjects.push(obj);
-        }
-        
-        loadedCount++;
-      }
-    }
-    
-    this.updateObjectList();
-    this.queuedWorldData = null;
-    return loadedCount;
   }
+  
+  // Clear existing objects
+  this.placedObjects.forEach(obj => this.scene.remove(obj));
+  this.placedObjects = [];
+  this.placedCollisionBoxes.forEach(box => this.scene.remove(box));
+  this.placedCollisionBoxes = [];
+  
+  let loadedCount = 0;
+  for (const objData of worldData.objects) {
+    if (this.availableModels.has(objData.modelName)) {
+      const modelData = this.availableModels.get(objData.modelName);
+      const obj = modelData.scene.clone();
+      
+      // Apply saved transform data
+      obj.position.set(objData.position.x, objData.position.y, objData.position.z);
+      obj.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
+      obj.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+      
+      // IMPORTANT: Set up proper userData for World Builder manipulation
+      obj.userData = {
+        ...objData.userData,
+        type: 'world-builder-object', // This is crucial!
+        modelName: objData.modelName,
+        instanceId: objData.instanceId || (Date.now() + Math.random()),
+        created: objData.userData.created || new Date().toISOString(),
+        isCollisionShape: modelData.isCollisionShape || objData.userData.isCollisionShape || false,
+        shapeType: modelData.shapeType || objData.userData.shapeType || null
+      };
+      
+      this.scene.add(obj);
+      
+      // Add to the correct tracking arrays
+      if (modelData.isCollisionShape || objData.userData.isCollisionShape) {
+        this.placedCollisionBoxes.push(obj);
+      } else {
+        this.placedObjects.push(obj);
+      }
+      
+      loadedCount++;
+    } else {
+      console.warn(`Model '${objData.modelName}' not available for loading`);
+    }
+  }
+  
+  // Update the UI to show loaded objects
+  this.updateObjectList();
+  this.queuedWorldData = null;
+  
+  console.log(`World loaded: ${loadedCount} objects restored and ready for manipulation`);
+  return loadedCount;
+}
     
   registerModel(modelName, modelData) {
     this.availableModels.set(modelName, modelData);
@@ -342,7 +361,7 @@ class WorldBuilder {
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">Z</strong> - Toggle Select Mode</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">V</strong> - Toggle Move Mode (surface/10m ahead)</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">R</strong> - Cycle Rotation Axis (X→Y→Z), scroll to rotate</div>
-        <div style="margin: 5px 0;"><strong style="color: #ffff00;">F</strong> - Toggle Scale Mode (scroll to scale)</div>
+        <div style="margin: 5px 0;"><strong style="color: #ffff00;">S</strong> - Cycle Scale Axis (X→Y→Z→All), scroll to scale</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">Click</strong> - Confirm action</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">Delete</strong> - Remove Selected</div>
         <div style="margin: 5px 0;"><strong style="color: #ffff00;">ESC</strong> - Free mouse to use panel</div>
@@ -546,6 +565,8 @@ setupEventListeners() {
     }
     
     this.rotationAxis = 'x'; // Track current rotation axis
+    this.scaleAxis = 'uniform'; // Track current scale axis (x, y, z, uniform)
+    this.precisionMoveStep = 0.1; // Default precision step
     
     document.addEventListener('keydown', (e) => {
       // Always check for Ctrl+B to toggle builder mode
@@ -557,6 +578,73 @@ setupEventListeners() {
       
       if (!this.isBuilderMode) return;
       
+      // Handle numpad precision movement (only in move mode with selected object)
+      if (this.currentMode === 'move' && this.selectedObject) {
+        let moved = false;
+        const step = this.precisionMoveStep;
+        
+        switch (e.code) {
+          case 'Numpad7': // -X
+            e.preventDefault();
+            this.selectedObject.position.x -= step;
+            this.showStatus(`Moved -X: ${this.selectedObject.position.x.toFixed(3)}`, 1000);
+            moved = true;
+            break;
+          case 'Numpad8': // +X
+            e.preventDefault();
+            this.selectedObject.position.x += step;
+            this.showStatus(`Moved +X: ${this.selectedObject.position.x.toFixed(3)}`, 1000);
+            moved = true;
+            break;
+          case 'Numpad4': // -Y
+            e.preventDefault();
+            this.selectedObject.position.y -= step;
+            this.showStatus(`Moved -Y: ${this.selectedObject.position.y.toFixed(3)}`, 1000);
+            moved = true;
+            break;
+          case 'Numpad5': // +Y
+            e.preventDefault();
+            this.selectedObject.position.y += step;
+            this.showStatus(`Moved +Y: ${this.selectedObject.position.y.toFixed(3)}`, 1000);
+            moved = true;
+            break;
+          case 'Numpad1': // -Z
+            e.preventDefault();
+            this.selectedObject.position.z -= step;
+            this.showStatus(`Moved -Z: ${this.selectedObject.position.z.toFixed(3)}`, 1000);
+            moved = true;
+            break;
+          case 'Numpad2': // +Z
+            e.preventDefault();
+            this.selectedObject.position.z += step;
+            this.showStatus(`Moved +Z: ${this.selectedObject.position.z.toFixed(3)}`, 1000);
+            moved = true;
+            break;
+        }
+        
+        if (moved) {
+          this.updateObjectList();
+          return; // Don't process other keys if we handled numpad
+        }
+      }
+      
+      // Handle precision step adjustment (Shift + Numpad keys)
+      if (e.shiftKey && this.currentMode === 'move' && this.selectedObject) {
+        switch (e.code) {
+          case 'NumpadAdd': // Shift + Numpad Plus - increase step
+            e.preventDefault();
+            this.precisionMoveStep = Math.min(this.precisionMoveStep * 2, 10);
+            this.showStatus(`Precision step: ${this.precisionMoveStep.toFixed(3)}`, 1500);
+            return;
+          case 'NumpadSubtract': // Shift + Numpad Minus - decrease step
+            e.preventDefault();
+            this.precisionMoveStep = Math.max(this.precisionMoveStep / 2, 0.001);
+            this.showStatus(`Precision step: ${this.precisionMoveStep.toFixed(3)}`, 1500);
+            return;
+        }
+      }
+      
+      // Regular World Builder controls
       switch (e.key.toLowerCase()) {
         case 't':
           e.preventDefault();
@@ -574,10 +662,10 @@ setupEventListeners() {
             this.showStatus('Select an object first to rotate', 2000);
           }
           break;
-        case 'f': // Changed from 's' to 'f' for scale
+        case 'f': // Keep F key for scale
           e.preventDefault();
           if (this.selectedObject) {
-            this.toggleMode('scale');
+            this.cycleScaleAxis();
           } else {
             this.showStatus('Select an object first to scale', 2000);
           }
@@ -586,6 +674,7 @@ setupEventListeners() {
           e.preventDefault();
           if (this.selectedObject) {
             this.setMode('move');
+            this.showStatus(`Move mode - Use numpad for precision: Step=${this.precisionMoveStep.toFixed(3)}`, 2000);
           } else {
             this.showStatus('Select an object first to move', 2000);
           }
@@ -621,41 +710,66 @@ setupEventListeners() {
       this.handleWorldClick(e);
     });
     
-document.addEventListener('wheel', (e) => {
-  if (!this.isBuilderMode || !this.selectedObject) return;
-  
-  e.preventDefault();
-  
-  if (this.currentMode === 'scale') {
-    const delta = e.deltaY > 0 ? -0.05 : 0.05;
-    const currentScale = this.selectedObject.scale.x;
-    const newScale = Math.max(0.01, Math.min(10, currentScale + delta)); // Changed from 0.1 to 0.01 min, 5 to 10 max
-    
-    this.selectedObject.scale.setScalar(newScale);
-    this.showStatus(`Scale: ${newScale.toFixed(3)} (scroll to adjust, click to confirm)`, 500); // Changed to 3 decimal places
-  } else if (this.currentMode === 'rotate') {
-    const delta = e.deltaY > 0 ? -Math.PI/12 : Math.PI/12; // 15 degrees per scroll
-    
-    switch (this.rotationAxis) {
-      case 'x':
-        this.selectedObject.rotation.x += delta;
-        break;
-      case 'y':
-        this.selectedObject.rotation.y += delta;
-        break;
-      case 'z':
-        this.selectedObject.rotation.z += delta;
-        break;
-    }
-    
-    const degrees = Math.round((delta * 180 / Math.PI));
-    const currentDegrees = Math.round((this.selectedObject.rotation[this.rotationAxis] * 180 / Math.PI));
-    this.showStatus(`${this.rotationAxis.toUpperCase()}: ${currentDegrees}° (scroll to adjust, click to confirm)`, 500);
-    this.updateObjectList();
-  }
-});
+    document.addEventListener('wheel', (e) => {
+      if (!this.isBuilderMode || !this.selectedObject) return;
+      
+      e.preventDefault();
+      
+      if (this.currentMode === 'scale') {
+        const delta = e.deltaY > 0 ? -0.05 : 0.05;
+        
+        if (this.scaleAxis === 'uniform') {
+          // Uniform scaling (all axes)
+          const currentScale = this.selectedObject.scale.x;
+          const newScale = Math.max(0.01, Math.min(10, currentScale + delta));
+          this.selectedObject.scale.setScalar(newScale);
+          this.showStatus(`Uniform Scale: ${newScale.toFixed(3)} (scroll to adjust, click to confirm)`, 500);
+        } else {
+          // Axis-specific scaling
+          const currentScale = this.selectedObject.scale[this.scaleAxis];
+          const newScale = Math.max(0.01, Math.min(10, currentScale + delta));
+          this.selectedObject.scale[this.scaleAxis] = newScale;
+          this.showStatus(`${this.scaleAxis.toUpperCase()} Scale: ${newScale.toFixed(3)} (scroll to adjust, click to confirm)`, 500);
+        }
+      } else if (this.currentMode === 'rotate') {
+        const delta = e.deltaY > 0 ? -Math.PI/12 : Math.PI/12; // 15 degrees per scroll
+        
+        switch (this.rotationAxis) {
+          case 'x':
+            this.selectedObject.rotation.x += delta;
+            break;
+          case 'y':
+            this.selectedObject.rotation.y += delta;
+            break;
+          case 'z':
+            this.selectedObject.rotation.z += delta;
+            break;
+        }
+        
+        const degrees = Math.round((delta * 180 / Math.PI));
+        const currentDegrees = Math.round((this.selectedObject.rotation[this.rotationAxis] * 180 / Math.PI));
+        this.showStatus(`${this.rotationAxis.toUpperCase()}: ${currentDegrees}° (scroll to adjust, click to confirm)`, 500);
+        this.updateObjectList();
+      }
+    });
 }
-
+cycleScaleAxis() {
+  if (!this.selectedObject) return;
+  
+  const axes = ['x', 'y', 'z', 'uniform'];
+  const currentIndex = axes.indexOf(this.scaleAxis);
+  this.scaleAxis = axes[(currentIndex + 1) % axes.length];
+  
+  this.setMode('scale');
+  
+  if (this.scaleAxis === 'uniform') {
+    const currentScale = this.selectedObject.scale.x;
+    this.showStatus(`Scaling uniformly: ${currentScale.toFixed(3)} (scroll to adjust)`, 2000);
+  } else {
+    const currentScale = this.selectedObject.scale[this.scaleAxis];
+    this.showStatus(`Scaling on ${this.scaleAxis.toUpperCase()} axis: ${currentScale.toFixed(3)} (scroll to adjust)`, 2000);
+  }
+}
   toggleMode(mode) {
   if (this.currentMode === mode) {
     this.setMode('select');
@@ -691,7 +805,16 @@ handleScaleClick() {
   if (!this.selectedObject) return;
   
   this.setMode('select');
-  this.showStatus('Scale confirmed', 1000);
+  
+  if (this.scaleAxis === 'uniform') {
+    const currentScale = this.selectedObject.scale.x;
+    this.showStatus(`Uniform scale confirmed: ${currentScale.toFixed(3)}`, 1500);
+  } else {
+    const currentScale = this.selectedObject.scale[this.scaleAxis];
+    this.showStatus(`${this.scaleAxis.toUpperCase()} scale confirmed: ${currentScale.toFixed(3)}`, 1500);
+  }
+  
+  this.updateObjectList();
 }
   setMode(mode) {
     this.currentMode = mode;
@@ -1253,49 +1376,63 @@ placeModel(position) {
     this.showStatus(`World saved (${allObjects.length} objects)`, 2000);
   }
   
-  async loadWorld() {
-    const stored = localStorage.getItem('world-builder-save');
-    if (!stored) {
-      this.showStatus('No saved world found', 2000);
-      return;
-    }
+async loadWorld() {
+  const stored = localStorage.getItem('world-builder-save');
+  if (!stored) {
+    this.showStatus('No saved world found', 2000);
+    return;
+  }
+  
+  try {
+    const worldData = JSON.parse(stored);
     
-    try {
-      const worldData = JSON.parse(stored);
-      
-      this.placedObjects.forEach(obj => this.scene.remove(obj));
-      this.placedCollisionBoxes.forEach(box => this.scene.remove(box));
-      this.placedObjects = [];
-      this.placedCollisionBoxes = [];
-      this.clearSelection();
-      
-      for (const objData of worldData.objects) {
-        if (this.availableModels.has(objData.modelName)) {
-          const modelData = this.availableModels.get(objData.modelName);
-          const obj = modelData.scene.clone();
-          
-          obj.position.set(objData.position.x, objData.position.y, objData.position.z);
-          obj.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
-          obj.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-          obj.userData = objData.userData;
-          
-          this.scene.add(obj);
-          
-          if (modelData.isCollisionShape || objData.userData.isCollisionShape) {
-            this.placedCollisionBoxes.push(obj);
-          } else {
-            this.placedObjects.push(obj);
-          }
+    // Clear existing objects
+    this.placedObjects.forEach(obj => this.scene.remove(obj));
+    this.placedCollisionBoxes.forEach(box => this.scene.remove(box));
+    this.placedObjects = [];
+    this.placedCollisionBoxes = [];
+    this.clearSelection();
+    
+    for (const objData of worldData.objects) {
+      if (this.availableModels.has(objData.modelName)) {
+        const modelData = this.availableModels.get(objData.modelName);
+        const obj = modelData.scene.clone();
+        
+        // Apply saved transform data
+        obj.position.set(objData.position.x, objData.position.y, objData.position.z);
+        obj.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
+        obj.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+        
+        // IMPORTANT: Set up proper userData for World Builder manipulation
+        obj.userData = {
+          ...objData.userData,
+          type: 'world-builder-object', // This is crucial!
+          modelName: objData.modelName,
+          instanceId: objData.instanceId || (Date.now() + Math.random()),
+          created: objData.userData.created || new Date().toISOString(),
+          isCollisionShape: modelData.isCollisionShape || objData.userData.isCollisionShape || false,
+          shapeType: modelData.shapeType || objData.userData.shapeType || null
+        };
+        
+        this.scene.add(obj);
+        
+        // Add to the correct tracking arrays
+        if (modelData.isCollisionShape || objData.userData.isCollisionShape) {
+          this.placedCollisionBoxes.push(obj);
+        } else {
+          this.placedObjects.push(obj);
         }
       }
-      
-      this.updateObjectList();
-      this.showStatus(`Loaded ${worldData.objects.length} objects`, 2000);
-      
-    } catch (error) {
-      this.showStatus('Failed to load world', 2000);
     }
+    
+    this.updateObjectList();
+    this.showStatus(`Loaded ${worldData.objects.length} objects`, 2000);
+    
+  } catch (error) {
+    console.error('Failed to load world:', error);
+    this.showStatus('Failed to load world', 2000);
   }
+}
   
   loadWorldConfig() {
     const stored = localStorage.getItem('world-builder-save');
