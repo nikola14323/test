@@ -46,7 +46,27 @@ class ModelLoader {
       });
     }
   }
-  
+  registerObjectWithWorldBuilder(object, modelName) {
+    if (!this.worldBuilder) return;
+    
+    // Set up proper userData for World Builder
+    object.userData = {
+        ...object.userData,
+        type: 'world-builder-object',
+        modelName: modelName,
+        instanceId: Date.now() + Math.random(),
+        created: new Date().toISOString(),
+        isCollisionShape: false
+    };
+    
+    // Add to World Builder's tracking
+    this.worldBuilder.placedObjects.push(object);
+    
+    // Update the object list UI
+    if (this.worldBuilder.updateObjectList) {
+        this.worldBuilder.updateObjectList();
+    }
+}
   loadModelOptimized(url, callback, progressCallback, errorCallback) {
     if (this.modelCache.has(url)) {
       callback(this.modelCache.get(url));
