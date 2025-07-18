@@ -18,6 +18,7 @@ let crosshair, timeDisplay; // Add these global declarations
 const infoWindows = new InfoWindows(portfolioAnalytics);
 const overlays = new Overlays(portfolioAnalytics);
 const meshCollisionSystem = new MeshCollisionSystem();
+window.meshCollisionSystem = meshCollisionSystem; // Make it globally available
 window.handleWindowResize = handleWindowResize;
 let gameStarted = false;
 let currentScene = 'main';
@@ -1065,7 +1066,8 @@ let modelLoader;
 try {
   modelLoader = new ModelLoader(scene, loadingManager, worldBuilder);
   modelLoader.setTotalModelsCount(totalModelsToLoad);
-    modelLoader.setMeshCollisionSystem(meshCollisionSystem);
+      modelLoader.setMeshCollisionSystem(meshCollisionSystem);
+  window.meshCollisionSystem = meshCollisionSystem; // Ensure it's global after setup
   
    // Auto-show collision debug after models load and position
   setTimeout(() => {
@@ -2164,6 +2166,78 @@ function handleModelInspect() {
 }
 
 window.handleModelInspect = handleModelInspect;
+
+
+
+window.forceRegisterCollision = function() {
+  if (worldBuilder && worldBuilder.selectedObject) {
+    const obj = worldBuilder.selectedObject;
+    const instanceName = obj.userData.instanceName || obj.userData.modelName || 'test_object';
+    
+    console.log(`🔧 Force registering collision for: ${instanceName}`);
+    console.log(`🔧 Object:`, obj);
+    console.log(`🔧 Object type:`, obj.constructor.name);
+    console.log(`🔧 Object children:`, obj.children.length);
+    
+    if (meshCollisionSystem) {
+      obj.updateMatrixWorld(true);
+      meshCollisionSystem.registerModelCollision(instanceName, obj);
+      
+      // Check if it worked
+      setTimeout(() => {
+        const isRegistered = meshCollisionSystem.collisionMeshes.has(instanceName);
+        console.log(`✅ Force registration result: ${isRegistered ? 'SUCCESS' : 'FAILED'}`);
+        
+        if (isRegistered && meshCollisionSystem.debugMode) {
+          // Refresh debug visualization
+          meshCollisionSystem.hideDebugHelpers(scene);
+          meshCollisionSystem.showDebugHelpers(scene);
+          console.log(`🔍 Debug visualization refreshed`);
+        }
+      }, 100);
+    }
+  } else {
+    console.log(`❌ No object selected in World Builder`);
+  }
+};
+window.debugCollisionState = function() {
+  console.log(`🔍 === COLLISION SYSTEM DEBUG ===`);
+  console.log(`🔍 meshCollisionSystem exists:`, !!window.meshCollisionSystem);
+  
+  if (window.meshCollisionSystem) {
+    console.log(`🔍 Debug mode:`, window.meshCollisionSystem.debugMode);
+    console.log(`🔍 Buffer size:`, window.meshCollisionSystem.boundingBoxBuffer);
+    console.log(`🔍 Registered models:`, Array.from(window.meshCollisionSystem.collisionMeshes.keys()));
+    console.log(`🔍 Total collision data:`, window.meshCollisionSystem.collisionMeshes.size);
+    
+    // Check each registered model
+    window.meshCollisionSystem.collisionMeshes.forEach((data, name) => {
+      console.log(`🔍 ${name}:`, {
+        meshCount: data.meshes.length,
+        bufferSize: data.bufferSize,
+        boundingBox: data.boundingBox,
+        center: data.center
+      });
+    });
+  }
+  
+  if (worldBuilder) {
+    console.log(`🔍 World Builder active:`, worldBuilder.isBuilderMode);
+    console.log(`🔍 Placed objects:`, worldBuilder.placedObjects.length);
+    console.log(`🔍 Selected object:`, !!worldBuilder.selectedObject);
+    
+    if (worldBuilder.selectedObject) {
+      const obj = worldBuilder.selectedObject;
+      console.log(`🔍 Selected object userData:`, obj.userData);
+      console.log(`🔍 Selected object children:`, obj.children.length);
+      obj.traverse(child => {
+        if (child.isMesh) {
+          console.log(`🔍 Found mesh:`, child.name, child.geometry.type);
+        }
+      });
+    }
+  }
+};
 
 function moveCharacter(dt) {
   if (!gameStarted || overlays.isPaperReadingMode() || (inventorySystem && inventorySystem.isOpen)) {
