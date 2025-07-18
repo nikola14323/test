@@ -1186,15 +1186,38 @@ placeModel(position) {
   } else {
     this.placedObjects.push(modelClone);
     
-    // Register collision IMMEDIATELY for non-collision-shape models
-    if (window.meshCollisionSystem && !this.selectedModel.startsWith('collision_')) {
-      // Force update the model's matrix first
-      modelClone.updateMatrixWorld(true);
-      
-      // Register collision immediately
-      window.meshCollisionSystem.registerModelCollision(instanceName, modelClone);
-      console.log(`Registered collision for placed model: ${instanceName}`);
+// Register collision IMMEDIATELY for non-collision-shape models
+if (window.meshCollisionSystem && !this.selectedModel.startsWith('collision_')) {
+  console.log(`🔧 Attempting to register collision for: ${instanceName}`);
+  console.log(`🔧 meshCollisionSystem exists:`, !!window.meshCollisionSystem);
+  console.log(`🔧 Model clone:`, modelClone);
+  console.log(`🔧 Model clone type:`, modelClone.constructor.name);
+  console.log(`🔧 Model has updateMatrixWorld:`, typeof modelClone.updateMatrixWorld === 'function');
+  
+  // Force update the model's matrix first
+  modelClone.updateMatrixWorld(true);
+  
+  // Register collision immediately
+  window.meshCollisionSystem.registerModelCollision(instanceName, modelClone);
+  console.log(`✅ Registered collision for placed model: ${instanceName}`);
+  
+  // Verify it was registered
+  setTimeout(() => {
+    const isRegistered = window.meshCollisionSystem.collisionMeshes.has(instanceName);
+    console.log(`🔍 Collision verification for ${instanceName}: ${isRegistered ? 'SUCCESS' : 'FAILED'}`);
+    if (isRegistered) {
+      const collisionData = window.meshCollisionSystem.collisionMeshes.get(instanceName);
+      console.log(`🔍 Collision data:`, collisionData);
+      console.log(`🔍 Mesh count:`, collisionData.meshes.length);
+      console.log(`🔍 Buffer size:`, collisionData.bufferSize);
     }
+  }, 100);
+} else {
+  console.log(`❌ Cannot register collision:`);
+  console.log(`❌ meshCollisionSystem exists:`, !!window.meshCollisionSystem);
+  console.log(`❌ Model name:`, this.selectedModel);
+  console.log(`❌ Starts with collision_:`, this.selectedModel.startsWith('collision_'));
+}
     
     this.showStatus(`Placed: ${this.selectedModel}`, 1500);
   }
